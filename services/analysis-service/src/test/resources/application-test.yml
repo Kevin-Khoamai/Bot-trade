@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  
+  data:
+    redis:
+      host: localhost
+      port: 6371 # Different port for test
+  
+  kafka:
+    bootstrap-servers: localhost:9094 # Different port for test
+
+# Test configuration
+analysis:
+  indicators:
+    ma-periods: [5, 10, 20]
+    rsi-period: 14
+    macd:
+      fast-period: 12
+      slow-period: 26
+      signal-period: 9
+    bb:
+      period: 20
+      multiplier: 2.0
+    stochastic:
+      k-period: 14
+      d-period: 3
+  
+  cache:
+    indicator-ttl: 60
+    prediction-ttl: 120
+
+logging:
+  level:
+    com.cryptotrading: DEBUG
