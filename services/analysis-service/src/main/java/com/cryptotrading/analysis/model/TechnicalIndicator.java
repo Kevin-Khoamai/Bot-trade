@@ -111,11 +111,21 @@ public class TechnicalIndicator {
         // Volume Indicators
         OBV,    // On Balance Volume
         VOLUME_SMA, // Volume Simple Moving Average
-        
+        VWAP,   // Volume Weighted Average Price
+
+        // Stochastic Indicators
+        STOCH_K,    // Stochastic %K
+        STOCH_D,    // Stochastic %D
+
         // Custom Indicators
         PRICE_CHANGE,   // Price change percentage
         VOLATILITY,     // Price volatility
-        MOMENTUM        // Price momentum
+        MOMENTUM,       // Price momentum
+
+        // Prediction Models
+        ARIMA_PREDICTION,   // ARIMA model prediction
+        ML_PREDICTION,      // Machine Learning prediction
+        TREND_PREDICTION    // Trend analysis prediction
     }
 
     /**

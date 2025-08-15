@@ -12,6 +12,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,8 @@ public class AnalysisController {
     private final RedisCacheService redisCacheService;
     private final MarketDataConsumerService marketDataConsumerService;
     private final AnalysisResultService analysisResultService;
+    private final PredictionService predictionService;
+    private final VWAPCalculationService vwapCalculationService;
 
     /**
      * Health check endpoint
@@ -253,6 +256,124 @@ public class AnalysisController {
         
         return ResponseEntity.ok(stats);
     }
+
+    /**
+     * Get predictions for a symbol
+     */
+    @GetMapping("/predictions/{symbol}")
+    public ResponseEntity<List<IndicatorResultDto>> getPredictions(@PathVariable String symbol) {
+        try {
+            List<TechnicalIndicator> predictions = predictionService.getCachedPredictions(symbol);
+
+            if (predictions.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            List<IndicatorResultDto> predictionDtos = predictions.stream()
+                    .map(IndicatorResultDto::fromEntity)
+                    .toList();
+
+            return ResponseEntity.ok(predictionDtos);
+
+        } catch (Exception e) {
+            log.error("Error retrieving predictions for symbol {}: {}", symbol, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Get VWAP data for a symbol
+     */
+    @GetMapping("/vwap/{symbol}")
+    public ResponseEntity<VWAPResponse> getVWAP(@PathVariable String symbol) {
+        try {
+            BigDecimal vwap = vwapCalculationService.getCachedVWAP(symbol);
+
+            if (vwap == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Get current price for deviation calculation
+            Optional<Object> cachedPrice = redisCacheService.getCachedIndicator(symbol, "CLOSE_PRICE");
+            BigDecimal currentPrice = null;
+            BigDecimal deviation = null;
+
+            if (cachedPrice.isPresent()) {
+                // Assuming cached price is stored as BigDecimal
+                currentPrice = (BigDecimal) cachedPrice.get();
+                deviation = vwapCalculationService.calculateVWAPDeviation(symbol, currentPrice);
+            }
+
+            VWAPResponse response = new VWAPResponse(vwap, currentPrice, deviation, LocalDateTime.now());
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Error retrieving VWAP for symbol {}: {}", symbol, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Get comprehensive analysis including indicators, predictions, and VWAP
+     */
+    @GetMapping("/comprehensive/{symbol}")
+    public ResponseEntity<ComprehensiveAnalysis> getComprehensiveAnalysis(@PathVariable String symbol) {
+        try {
+            // Get indicators
+            List<TechnicalIndicator> indicators = technicalIndicatorRepository
+                    .findLatestBySymbol(symbol, PageRequest.of(0, 50));
+
+            // Get predictions
+            List<TechnicalIndicator> predictions = predictionService.getCachedPredictions(symbol);
+
+            // Get VWAP
+            BigDecimal vwap = vwapCalculationService.getCachedVWAP(symbol);
+
+            // Convert to DTOs
+            List<IndicatorResultDto> indicatorDtos = indicators.stream()
+                    .map(IndicatorResultDto::fromEntity)
+                    .toList();
+
+            List<IndicatorResultDto> predictionDtos = predictions.stream()
+                    .map(IndicatorResultDto::fromEntity)
+                    .toList();
+
+            ComprehensiveAnalysis analysis = new ComprehensiveAnalysis(
+                symbol,
+                indicatorDtos,
+                predictionDtos,
+                vwap,
+                LocalDateTime.now()
+            );
+
+            return ResponseEntity.ok(analysis);
+
+        } catch (Exception e) {
+            log.error("Error retrieving comprehensive analysis for symbol {}: {}", symbol, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * VWAP response record
+     */
+    public record VWAPResponse(
+        BigDecimal vwap,
+        BigDecimal currentPrice,
+        BigDecimal deviationPercent,
+        LocalDateTime timestamp
+    ) {}
+
+    /**
+     * Comprehensive analysis response record
+     */
+    public record ComprehensiveAnalysis(
+        String symbol,
+        List<IndicatorResultDto> indicators,
+        List<IndicatorResultDto> predictions,
+        BigDecimal vwap,
+        LocalDateTime timestamp
+    ) {}
 
     /**
      * Analysis statistics record

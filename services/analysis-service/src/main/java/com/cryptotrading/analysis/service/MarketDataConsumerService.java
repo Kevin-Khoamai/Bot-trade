@@ -28,6 +28,7 @@ public class MarketDataConsumerService {
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
     private final AnalysisResultService analysisResultService;
     private final RedisCacheService redisCacheService;
+    private final PredictionService predictionService;
 
     // Buffer to collect market data for batch processing
     private final ConcurrentMap<String, MarketDataBuffer> dataBuffers = new ConcurrentHashMap<>();
@@ -114,18 +115,26 @@ public class MarketDataConsumerService {
             
             // Calculate technical indicators
             List<TechnicalIndicator> indicators = indicatorCalculationService.calculateAllIndicators(symbol, dataList);
-            
-            if (!indicators.isEmpty()) {
-                // Save indicators to database
-                saveIndicators(indicators);
-                
+
+            // Generate predictions
+            List<TechnicalIndicator> predictions = predictionService.generatePredictions(symbol, dataList);
+
+            // Combine indicators and predictions
+            List<TechnicalIndicator> allIndicators = new ArrayList<>(indicators);
+            allIndicators.addAll(predictions);
+
+            if (!allIndicators.isEmpty()) {
+                // Save indicators and predictions to database
+                saveIndicators(allIndicators);
+
                 // Cache indicators in Redis
-                cacheIndicators(indicators);
-                
-                // Publish analysis results
-                analysisResultService.publishAnalysisResults(symbol, indicators);
-                
-                log.info("Processed {} indicators for symbol: {}", indicators.size(), symbol);
+                cacheIndicators(allIndicators);
+
+                // Publish analysis results (including predictions)
+                analysisResultService.publishAnalysisResults(symbol, allIndicators);
+
+                log.info("Processed {} indicators and {} predictions for symbol: {}",
+                        indicators.size(), predictions.size(), symbol);
             }
             
         } catch (Exception e) {
